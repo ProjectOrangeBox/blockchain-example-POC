@@ -1,0 +1,13 @@
+{
+    "name": "dmyers/block-chains",
+    "require": {},
+    "autoload": {
+        "psr-4": {
+            "Dmyers\\BlockChains\\": "src/"
+        }
+    },
+    "authors": [{
+        "name": "Don Myers",
+        "email": "donmyers@me.com"
+    }]
+}
