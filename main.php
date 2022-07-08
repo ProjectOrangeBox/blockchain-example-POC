@@ -10,7 +10,7 @@ $tools = new Tools;
 
 $chainFile = __DIR__ . '/chain.json';
 
-@unlink($chainFile);
+unlink($chainFile);
 
 $blockchain = new Blockchain($chainFile);
 
