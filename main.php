@@ -35,3 +35,5 @@ try {
 	var_dump($e->getMessage());
 	var_dump($e->getCode());
 }
+
+//var_dump($blockchain->getChain());

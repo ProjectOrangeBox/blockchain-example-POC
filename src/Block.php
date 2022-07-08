@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 namespace Dmyers\BlockChains;
 
 use stdClass;
@@ -54,7 +56,7 @@ class Block
 		$lcname = strtolower($name);
 
 		if (!in_array($lcname, $this->properties)) {
-			throw new Exception($name . ' Unknown property');
+			throw new BlockChainException($name . ' Unknown property');
 		}
 
 		return $lcname;

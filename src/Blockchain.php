@@ -4,8 +4,6 @@ declare(strict_types=1);
 
 namespace Dmyers\BlockChains;
 
-use stdClass;
-
 class Blockchain
 {
 	const JSONFLAGS = JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_HEX_AMP | JSON_UNESCAPED_UNICODE | JSON_PRETTY_PRINT;
@@ -24,58 +22,22 @@ class Blockchain
 		$this->read();
 	}
 
-	public function read()
+	public function getChain(): array
 	{
-		if (!file_exists($this->path)) {
-			$this->createFile();
-		}
-
-		$JsonChain = json_decode(file_get_contents($this->path));
-
-		if (json_last_error() !== JSON_ERROR_NONE) {
-			throw new \Exception('JSON file "' . $this->path . '" is not valid JSON.');
-		}
-
-		$this->chain = [];
-
-		foreach ($JsonChain as $JsonObject) {
-			$this->chain[] = new Block(
-				$JsonObject->index,
-				$JsonObject->timestamp,
-				$JsonObject->{'proof-of-work'},
-				$JsonObject->transaction,
-				$JsonObject->hashid,
-			);
-		}
-	}
-
-	public function createFile()
-	{
-		$block = $this->firstBlock();
-
-		$block->hashid = $this->hash($block->transaction, $block);
-
-		$this->chain[] = $block;
-
-		$this->write();
-	}
-
-	public function write()
-	{
-		$array = [];
+		$chainArray = [];
 
 		foreach ($this->chain as $block) {
-			$array[] = $block->asObj();
+			$chainArray[] = $block->asObj();
 		}
 
-		file_put_contents($this->path, json_encode($array, self::JSONFLAGS));
+		return $chainArray;
 	}
 
 	public function add(string $transaction, string $pow)
 	{
-		$block = $this->makeBlock($transaction, $pow);
+		$block = $this->makeBlock($this->getNextIndex(), $transaction, $pow);
 
-		$block->hashid = $this->hash($block->transaction, $this->getLastBlock());
+		$block->hashid = $this->hash($block, $this->getLastBlock());
 
 		$this->chain[] = $block;
 
@@ -84,18 +46,18 @@ class Blockchain
 
 	public function verify(): bool
 	{
-		foreach ($this->chain as $index => $block) {
-			$previousBlock = ($index === 0) ? $this->firstBlock() : $this->getByIndex($block->index - 1);
+		foreach ($this->chain as $block) {
+			$previousBlock = ($block->index === 0) ? $this->makeBlock(0, $this->initTransaction, $this->initPOW) : $this->getByIndex($block->index - 1);
 
-			if ($this->hash($block->transaction, $previousBlock) !== $block->hashid) {
-				throw new \Exception('Verification Failed Record Index: ' . $block->index, $block->index);
+			if ($this->hash($block, $previousBlock) !== $block->hashid) {
+				throw new BlockChainCorruptException('Verification Failed Record Index: ' . $block->index, $block->index);
 			}
 		}
 
 		return true;
 	}
 
-	public function getById(string $hashid)
+	public function getById(string $hashid): Block
 	{
 		$foundBlock = null;
 
@@ -107,13 +69,13 @@ class Blockchain
 		}
 
 		if ($foundBlock === null) {
-			throw new \Exception('Could not find the block with the hash id of ' . $hashid);
+			throw new BlockChainException('Could not find the block with the hash id of ' . $hashid);
 		}
 
 		return $foundBlock;
 	}
 
-	public function getByIndex(int $index)
+	public function getByIndex(int $index): Block
 	{
 		$foundBlock = null;
 
@@ -125,7 +87,7 @@ class Blockchain
 		}
 
 		if ($foundBlock === null) {
-			throw new \Exception('Could not find the block with the index of ' . $index);
+			throw new BlockChainException('Could not find the block with the index of ' . $index);
 		}
 
 		return $foundBlock;
@@ -143,23 +105,57 @@ class Blockchain
 		return $this->getLastIndex() + 1;
 	}
 
-	public function getLastBlock()
+	public function getLastBlock(): Block
 	{
 		return end($this->chain);
 	}
 
-	public function makeBlock(string $transaction, string $pow): Block
+	/* protected */
+
+	protected function makeBlock(int $index, string $transaction, string $pow): Block
 	{
-		return new Block($this->getNextIndex(), null, $pow, $transaction, '');
+		return new Block($index, null, $pow, $transaction, '');
 	}
 
-	public function firstBlock(): Block
+	protected function hash(Block $block, Block $previousBlock): string
 	{
-		return new Block(0, null, $this->initPOW, $this->initTransaction, '');
+		return hash($this->hashAlgo, $previousBlock->hashid . $previousBlock->index . $previousBlock->timestamp . $block->transaction);
 	}
 
-	public function hash(string $transaction, Block $previousBlock): string
+	protected function read()
 	{
-		return hash($this->hashAlgo, $previousBlock->hashid . $previousBlock->index . $previousBlock->timestamp . $transaction);
+		if (!file_exists($this->path)) {
+			$this->createFile();
+		}
+
+		$JsonChain = json_decode(file_get_contents($this->path));
+
+		if (json_last_error() !== JSON_ERROR_NONE) {
+			throw new BlockChainException('The file "' . $this->path . '" is not valid JSON.');
+		}
+
+		$this->chain = [];
+
+		foreach ($JsonChain as $JsonObject) {
+			$this->chain[] = new Block($JsonObject->index, $JsonObject->timestamp, $JsonObject->{'proof-of-work'}, $JsonObject->transaction, $JsonObject->hashid);
+		}
+	}
+
+	protected function createFile()
+	{
+		$block = $this->makeBlock(0, $this->initTransaction, $this->initPOW);
+
+		$block->hashid = $this->hash($block, $block);
+
+		$this->chain[] = $block;
+
+		$this->write();
+	}
+
+	protected function write(): bool
+	{
+		$jsonString = json_encode($this->getChain(), self::JSONFLAGS);
+
+		return (bool)file_put_contents($this->path, $jsonString, LOCK_EX);
 	}
 } /* end class */
